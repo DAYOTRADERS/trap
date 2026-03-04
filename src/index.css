@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 7%;
+    --foreground: 210 20% 90%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 210 20% 90%;
+
+    --popover: 220 18% 12%;
+    --popover-foreground: 210 20% 90%;
+
+    --primary: 142 71% 45%;
+    --primary-foreground: 220 20% 7%;
+
+    --secondary: 220 16% 16%;
+    --secondary-foreground: 210 20% 80%;
+
+    --muted: 220 14% 14%;
+    --muted-foreground: 215 12% 50%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 220 20% 7%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 16% 18%;
+    --input: 220 16% 18%;
+    --ring: 142 71% 45%;
+
+    --radius: 0.5rem;
+
+    --success: 142 71% 45%;
+    --loss: 0 72% 51%;
+    --warning: 38 92% 50%;
+    --info: 210 100% 56%;
+
+    --glow-primary: 0 0 20px hsl(142 71% 45% / 0.3);
+    --glow-accent: 0 0 20px hsl(38 92% 50% / 0.3);
+    --glow-loss: 0 0 20px hsl(0 72% 51% / 0.3);
+
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-display);
+  }
+
+  code, .font-mono {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer utilities {
+  .glow-green {
+    box-shadow: var(--glow-primary);
+  }
+  .glow-red {
+    box-shadow: var(--glow-loss);
+  }
+  .glow-amber {
+    box-shadow: var(--glow-accent);
+  }
+  .text-success {
+    color: hsl(var(--success));
+  }
+  .text-loss {
+    color: hsl(var(--loss));
+  }
+  .bg-success {
+    background-color: hsl(var(--success));
+  }
+  .bg-loss {
+    background-color: hsl(var(--loss));
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px hsl(142 71% 45% / 0.3); }
+  50% { box-shadow: 0 0 20px hsl(142 71% 45% / 0.6); }
+}
+
+@keyframes tick-flash {
+  0% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-tick {
+  animation: tick-flash 0.3s ease-out;
+}
