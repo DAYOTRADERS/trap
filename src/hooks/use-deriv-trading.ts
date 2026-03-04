@@ -194,120 +194,75 @@ export function useDerivTrading() {
   }, [sendRequest, log]);
 
   // ===================== START CHANGE =====================
-  const placeTrades = useCallback(async (stake: number) => {
-    if (status !== 'authorized' || !currentMarket) return;
-    setIsTrading(true);
+  const placeTrades = useCallback(async () => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !currentMarket) return;
 
-    const results: TradeResult[] = [];
+    const numC = 10; // always 10 trades for digits 0-9
 
-    // Cancel any recent trades
-    tradeResults.forEach(trade => {
-      if (trade.timestamp < Date.now() - 2000) return;
-      if (trade.contractId) {
-        sendRequest({
-          cancel_all: 1,
-          contract_id: trade.contractId,
-          reason: 'replaced'
-        }).catch(e => console.error('Cancel error:', e));
-      }
-    });
+    // Cancel any recent trades immediately to avoid conflicts
+    tradeResults.forEach(trade => 
+        wsRef.current!.send(JSON.stringify({
+            cancel_all: 1,
+            contract_id: trade.contractId,
+            reason: 'replaced'
+        })).catch(e => console.error('Cancel error:', e))
+    );
 
-    // 1️⃣ Place all 10 digit trades (0-9) as virtual
-    const digits = ['1','2','3','4','5','6','7','8','9','0'];
-    log(`Placing 10 virtual trades for all digits...`, 'info');
+    // Place all trades immediately as virtual for now
+    const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    
+    for (const digit of digits) {
+        await new Promise(resolve => setTimeout(resolve, 10)); // avoid rate limit
 
-    for (const barrier of digits) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      try {
-        const buyResp = await sendRequest({
-          buy: '1',
-          parameters: {
-            amount: stake,
-            basis: 'quote', // virtual
-            contract_type: 'DIGITMATCH',
-            currency,
-            symbol: currentMarket.symbol,
-            duration: 1,
-            duration_unit: 't',
-            barrier,
-          },
-        });
-
-        if (!buyResp.error) {
-          results.push({
-            contractId: buyResp.buy?.contract_id || null,
-            digit: parseInt(barrier),
-            selectedDigit: -1,
-            profit: 0,
-            win: false,
-            timestamp: Date.now(),
-            status: 'pending',
-            buyPrice: buyResp.buy?.buy_price || stake,
-            payout: buyResp.buy?.payout || 0,
-          });
-        }
-      } catch (e: any) {
-        log(`Trade failed (digit ${barrier}): ${e.message}`, 'error');
-      }
+        wsRef.current!.send(JSON.stringify({
+            buy: '1',
+            parameters: {
+                amount: 1,
+                basis: 'quote',     // use quote currency
+                contract_type: 'DIGITMATCH',
+                currency, 
+                symbol: currentMarket.symbol,
+                duration: 1,
+                duration_unit: 't',
+                barrier: digit       // fixed parameter
+            }
+        }));
     }
 
-    setTradeResults(prev => [...prev.filter(t => t.timestamp >= Date.now() - 2000), ...results]);
+    // Wait for the first tick to arrive and determine winner
+    let tickData;
+    
+    return new Promise((resolve) => {
+        const tickHandler = async (data: any) => {
+            if (!tickData && data.tick?.event === 'tick') {  // first tick only
+                tickData = data;
 
-    // 2️⃣ Wait for the next tick → convert winning digit to real
-    tickListenerRef.current = async (tickData: any) => {
-      try {
-        const tick = tickData.tick;
-        const winningDigit = parseInt(String(tick.quote).slice(-1));
-        log(`Winning digit: ${winningDigit}`, 'info');
+                // Cancel all trades immediately as they're already executed on the exchange server
+                tradeResults.forEach(trade =>
+                    wsRef.current!.send(JSON.stringify({ cancel_all: 1, contract_id: trade.contractId }))
+                        .catch(e => console.error('Cancel error:', e))
+                );
 
-        setTradeResults(prev =>
-          prev.map(trade => {
-            if (trade.digit === winningDigit && trade.status === 'pending') {
-              sendRequest({
-                buy: '1',
-                price: stake,
-                parameters: {
-                  amount: stake,
-                  basis: 'stake', // real
-                  contract_type: 'DIGITMATCH',
-                  currency,
-                  symbol: currentMarket.symbol,
-                  duration: 1,
-                  duration_unit: 't',
-                  barrier: String(winningDigit),
-                },
-              }).then(buyResp => {
-                if (!buyResp.error && buyResp.buy?.contract_id) {
-                  const newContractId = String(buyResp.buy.contract_id);
-                  log(`REAL trade placed for digit ${winningDigit}, contract ${newContractId}`, 'success');
-                  setTradeResults(prev2 =>
-                    prev2.map(t =>
-                      t.digit === winningDigit && t.status === 'pending'
-                        ? { ...t, contractId: newContractId, status: 'real' }
-                        : t
-                    )
-                  );
-                  sendRequest({
-                    proposal_open_contract: 1,
-                    contract_id: newContractId,
-                    subscribe: 1,
-                  }).catch(() => {});
-                }
-              }).catch(e => log(`Real trade error: ${e.message}`, 'error'));
+                // Calculate winning digit and update results directly
+                const winningDigit = Number(data.tick.quote.toFixed(1).slice(-1));
+                
+                setTradeResults(prev =>
+                    prev.map(t => ({
+                        ...t,
+                        win: t.digit === winningDigit,  // mark as real trade only after knowing winner
+                        contractId: null  // reset for next run
+                    }))
+                );
+
+                resolve(); // complete the promise when done
+                
+                wsRef.current!.removeEventListener('message', tickHandler as any);  // remove handler
             }
-            return trade;
-          })
-        );
+        };
 
-        // Update balance
-        const balResp = await sendRequest({ balance: 1 });
-        if (balResp.balance) setBalance(String(balResp.balance.balance));
-      } catch (e: any) {
-        log(`Real trade failed: ${e.message}`, 'error');
-      }
-      setIsTrading(false);
-    };
-  }, [status, currentMarket, tradeResults, sendRequest, log]);
+        wsRef.current!.addEventListener('message', tickHandler as any);
+    });
+  }, [currentMarket, tradeResults, currency]);
   // ===================== END CHANGE =====================
 
   useEffect(() => {
@@ -330,7 +285,7 @@ export function useDerivTrading() {
     connect,
     disconnect,
     subscribeTicks,
-    placeTrades, // <-- new method
+    placeTrades, // <-- new simple method
     log,
   };
 }
