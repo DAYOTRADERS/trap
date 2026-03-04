@@ -33,24 +33,12 @@ export function TradeControls({ onTrade, selectedDigit, isTrading, disabled }: T
         <p className="text-xs text-muted-foreground">Places 10 virtual trades (digits 0-9), then real trade on winning tick</p>
       </div>
 
-      <Button
-        onClick={() => onTrade(selectedDigit, parseFloat(stake))}
-        disabled={disabled || isTrading || parseFloat(stake) < 0.35}
-        className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold gap-2"
-        size="lg"
-      >
-        {isTrading ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Trading...
-          </>
-        ) : (
-          <>
-            <Play className="w-4 h-4" />
-            Match Digit {selectedDigit}
-          </>
-        )}
-      </Button>
+     <Button
+  onClick={() => onTrade(parseFloat(stake))}  // only pass stake now
+  disabled={disabled || isTrading || parseFloat(stake) < 0.35}
+>
+  {isTrading ? 'Trading...' : 'Place 10 Trades'}
+</Button>
     </div>
   );
 }
